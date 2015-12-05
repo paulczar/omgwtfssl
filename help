@@ -1,0 +1,3 @@
+#!/bin/bash
+
+cat /usr/local/bin/README.md

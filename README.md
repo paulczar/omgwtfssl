@@ -68,6 +68,8 @@ Examples
 
 ### Create Certificates for NGINX
 
+_Creating web certs for testing SSL just got a hell of a lot easier..._
+
 Create Certificate:
 ```
 $ docker run -v /tmp/certs:/certs \
@@ -107,3 +109,62 @@ $ curl --cacert /tmp/certs/ca.pem https://test.example.com
 ```
 
 
+### Create keys for docker registry
+
+_Slightly more interesting example of using `paulczar/omgwtfssl` as a volume container to build and host SSL certs for the Docker Registry image_
+
+Create the volume container for the registry from `paulczar/omgwtfssl`:
+
+```
+$ docker run \
+  --name certs \
+  -e SSL_SUBJECT=test.example.com \
+  paulczar/omgwtfssl
+----------------------------
+| OMGWTFSSL Cert Generator |
+----------------------------
+
+--> Certificate Authority
+====> Generating new CA key ca-key.pem
+Generating RSA private key, 2048 bit long modulus
+..........+++
+.......................................................+++
+e is 65537 (0x10001)
+====> Generating new CA Certificate ca.pem
+====> Generating new config file openssl.cnf
+====> Generating new SSL KEY key.pem
+Generating RSA private key, 2048 bit long modulus
+........................................................................................................................................................+++
+...+++
+e is 65537 (0x10001)
+====> Generating new SSL CSR key.csr
+====> Generating new SSL CERT cert.pem
+Signature ok
+subject=/CN=test.example.com
+Getting CA Private Key
+```
+
+Run the registry using `--volumes-from` to use the volume container created above:
+
+```
+$ docker run -d \
+    --name registry \
+    --volumes-from certs \
+    -e REGISTRY_HTTP_TLS_CERTIFICATE=/certs/cert.pem \
+    -e REGISTRY_HTTP_TLS_KEY=/certs/key.pem \
+    -p 5000:5000 \
+    registry:2
+```
+
+Make sure it works:
+```
+$ echo "127.0.2.1       test.example.com" >> /etc/hosts
+$ docker tag paulczar/omgwtfssl test.example.com:5000/omgwtfbbq
+$ docker push test.example.com:5000/omgwtfbbq
+The push refers to a repository [test.example.com:5000/omgwtfbbq] (len: 1)
+e34964fe7cfa: Pushed 
+d52b82eb9ff3: Pushed 
+6b030e7d76a6: Pushed 
+8a648f689ddb: Pushed 
+latest: digest: sha256:8a97202b0ad9b375ff478d84ed948ae7ddd298196fd3b341fc8391a0fe71345a size: 7617
+```    

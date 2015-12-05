@@ -32,8 +32,13 @@ e is 65537 (0x10001)
 Signature ok
 subject=/CN=test
 Getting CA Private Key
-ls /tmp/certs 
+
+$ ls /tmp/certs 
 ca-key.pem  ca.pem  ca.srl  cert.pem  key.csr  key.pem  openssl.cnf
+
+$ openssl verify -CAfile /tmp/certs/ca.pem /tmp/certs/cert.pem 
+/tmp/certs/cert.pem: OK
+
 ```
 
 Advanced Usage
@@ -51,12 +56,54 @@ Customize the certs using the following Environment Variables:
 * `SSL_CERT` SSL Cert file, default `cert.pem`
 * `SSL_SIZE` SSL Cert size, default `2048` bits
 * `SSL_EXPIRE` SSL Cert expiry, default `60` days
-* `SSL_SUBJECT` SSL Subject default `test` __[2]__
-* `SSL_DNS` comma seperate list of valid hostnames, default `test.com` __[2]__
-* `SSL_IP` comma seperate list of valid IPs, default `127.0.0.1` __[2]__
+* `SSL_SUBJECT` SSL Subject default `example.com`
+* `SSL_DNS` comma seperate list of alternative hostnames, no default [2]
+* `SSL_IP` comma seperate list of alternative IPs, no default [2]
 
 __[1] If file already exists will re-use.__
-__[2] Skipped if `SSL_CONFIG` already exists.__
+__[2] If `SSL_DNS` or `SSL_IP` is set will add `SSL_SUBJECT` to alternative hostname list__
 
+Examples
+--------
+
+### Create Certificates for NGINX
+
+Create Certificate:
+```
+$ docker run -v /tmp/certs:/certs \
+  -e SSL_SUBJECT=test.example.com   paulczar/omgwtfssl
+```
+
+Enable SSL in `/etc/nginx/sites-enabled/default`:
+
+```
+server {
+        listen 443;
+        server_name test.example.com;
+        root html;
+        index index.html index.htm;
+        ssl on;
+        ssl_certificate /tmp/certs/cert.pem;
+        ssl_certificate_key /tmp/certs/key.pem;
+        ssl_session_timeout 5m;
+        ssl_protocols       TLSv1 TLSv1.1 TLSv1.2;
+        ssl_ciphers         HIGH:!aNULL:!MD5;
+        location / {
+                try_files $uri $uri/ =404;
+        }
+}
+```
+
+Restart NGINX and test:
+
+```
+$ service nginx restart
+$ echo '127.0.2.1       test.example.com' >> /etc/hosts
+$ curl --cacert /tmp/certs/ca.pem https://test.example.com
+<!DOCTYPE html>
+<html>
+<head>
+...
+```
 
 

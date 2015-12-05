@@ -4,6 +4,6 @@ RUN apk --update add bash openssl
 
 WORKDIR /certs
 
-COPY * /usr/local/bin/
+COPY generate-certs /usr/local/bin/generate-certs
 
 CMD /usr/local/bin/generate-certs

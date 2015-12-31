@@ -61,7 +61,7 @@ EOM
     done
 
     if [[ -n ${SSL_IP} ]]; then
-        ip=$(${SSL_IP})
+        ip=(${SSL_IP})
         for i in "${!ip[@]}"; do
           echo IP.$((i+1)) = ${ip[$i]} >> ${SSL_CONFIG}
         done

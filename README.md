@@ -59,7 +59,6 @@ Customize the certs using the following Environment Variables:
 * `SSL_SUBJECT` SSL Subject default `example.com`
 * `SSL_DNS` comma seperate list of alternative hostnames, no default [2]
 * `SSL_IP` comma seperate list of alternative IPs, no default [2]
-* `SSL_CLIENT_AUTH` allow cert to be used for client auth, default no.
 
 __[1] If file already exists will re-use.__
 __[2] If `SSL_DNS` or `SSL_IP` is set will add `SSL_SUBJECT` to alternative hostname list__

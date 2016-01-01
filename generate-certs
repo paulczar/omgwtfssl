@@ -46,14 +46,8 @@ distinguished_name = req_distinguished_name
 [ v3_req ]
 basicConstraints = CA:FALSE
 keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+extendedKeyUsage = clientAuth, serverAuth
 EOM
-
-if [[ -n ${SSL_CLIENT_AUTH} ]]; then
-    cat >> ${SSL_CONFIG} <<EOM
-[ ssl_client ]
-extendedKeyUsage = clientAuth
-EOM
-fi
 
 if [[ -n ${SSL_DNS} || -n ${SSL_IP} ]]; then
     cat >> ${SSL_CONFIG} <<EOM

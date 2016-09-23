@@ -8,7 +8,7 @@ echo
 export CA_KEY=${CA_KEY-"ca-key.pem"}
 export CA_CERT=${CA_CERT-"ca.pem"}
 export CA_SUBJECT=${CA_SUBJECT:-"test-ca"}
-export CA_EXPIRE=${EXPIRE:-"60"}
+export CA_EXPIRE=${CA_EXPIRE:-"60"}
 
 export SSL_CONFIG=${SSL_CONFIG:-"openssl.cnf"}
 export SSL_KEY=${SSL_KEY:-"key.pem"}

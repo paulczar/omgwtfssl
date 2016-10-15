@@ -21,6 +21,8 @@ export SSL_SUBJECT=${SSL_SUBJECT:-"example.com"}
 export SSL_DNS=${SSL_DNS}
 export SSL_IP=${SSL_IP}
 
+export DEBUG=${DEBUG:=1}
+
 echo "--> Certificate Authority"
 
 if [[ -e ./${CA_KEY} ]]; then
@@ -30,12 +32,16 @@ else
     openssl genrsa -out ${CA_KEY} 2048
 fi
 
+[[ -n $DEBUG ]] && cat $CA_KEY
+
 if [[ -e ./${CA_CERT} ]]; then
     echo "====> Using existing CA Certificate ${CA_CERT}"
 else
     echo "====> Generating new CA Certificate ${CA_CERT}"
     openssl req -x509 -new -nodes -key ${CA_KEY} -days ${CA_EXPIRE} -out ${CA_CERT} -subj "/CN=${CA_SUBJECT}"  || exit 1
 fi
+
+[[ -n $DEBUG ]] && cat $CA_CERT
 
 echo "====> Generating new config file ${SSL_CONFIG}"
 cat > ${SSL_CONFIG} <<EOM
@@ -70,12 +76,20 @@ EOM
     fi
 fi
 
+[[ -n $DEBUG ]] && cat $SSL_CONFIG
+
 echo "====> Generating new SSL KEY ${SSL_KEY}"
 openssl genrsa -out ${SSL_KEY} ${SSL_SIZE}  || exit 1
+
+[[ -n $DEBUG ]] && cat $SSL_KEY
 
 echo "====> Generating new SSL CSR ${SSL_CSR}"
 openssl req -new -key ${SSL_KEY} -out ${SSL_CSR} -subj "/CN=${SSL_SUBJECT}" -config ${SSL_CONFIG}  || exit 1
 
+[[ -n $DEBUG ]] && cat $SSL_CSR
+
 echo "====> Generating new SSL CERT ${SSL_CERT}"
 openssl x509 -req -in ${SSL_CSR} -CA ${CA_CERT} -CAkey ${CA_KEY} -CAcreateserial -out ${SSL_CERT} \
     -days ${SSL_EXPIRE} -extensions v3_req -extfile ${SSL_CONFIG}  || exit 1
+
+[[ -n $DEBUG ]] && cat $SSL_CERT

@@ -32,8 +32,6 @@ else
     openssl genrsa -out ${CA_KEY} 2048
 fi
 
-[[ -n $DEBUG ]] && cat $CA_KEY
-
 if [[ -e ./${CA_CERT} ]]; then
     echo "====> Using existing CA Certificate ${CA_CERT}"
 else
@@ -76,20 +74,28 @@ EOM
     fi
 fi
 
-[[ -n $DEBUG ]] && cat $SSL_CONFIG
-
 echo "====> Generating new SSL KEY ${SSL_KEY}"
 openssl genrsa -out ${SSL_KEY} ${SSL_SIZE}  || exit 1
 
-[[ -n $DEBUG ]] && cat $SSL_KEY
-
 echo "====> Generating new SSL CSR ${SSL_CSR}"
 openssl req -new -key ${SSL_KEY} -out ${SSL_CSR} -subj "/CN=${SSL_SUBJECT}" -config ${SSL_CONFIG}  || exit 1
-
-[[ -n $DEBUG ]] && cat $SSL_CSR
 
 echo "====> Generating new SSL CERT ${SSL_CERT}"
 openssl x509 -req -in ${SSL_CSR} -CA ${CA_CERT} -CAkey ${CA_KEY} -CAcreateserial -out ${SSL_CERT} \
     -days ${SSL_EXPIRE} -extensions v3_req -extfile ${SSL_CONFIG}  || exit 1
 
-[[ -n $DEBUG ]] && cat $SSL_CERT
+echo -n
+echo -n
+echo "***** CA CERT"
+cat $CA_CERT
+echo -n
+echo -n
+echo "***** SSL_KEY"
+cat $SSL_KEY
+echo -n
+echo -n
+echo "***** SSL CERT"
+cat $SSL_CERT
+echo -n
+echo -n
+

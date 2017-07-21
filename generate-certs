@@ -29,17 +29,15 @@ if [[ -e ./${CA_KEY} ]]; then
     echo "====> Using existing CA Key ${CA_KEY}"
 else
     echo "====> Generating new CA key ${CA_KEY}"
-    openssl genrsa -out ${CA_KEY} 2048
+    openssl genrsa -out ${CA_KEY} ${SSL_SIZE} > /dev/null
 fi
 
 if [[ -e ./${CA_CERT} ]]; then
     echo "====> Using existing CA Certificate ${CA_CERT}"
 else
     echo "====> Generating new CA Certificate ${CA_CERT}"
-    openssl req -x509 -new -nodes -key ${CA_KEY} -days ${CA_EXPIRE} -out ${CA_CERT} -subj "/CN=${CA_SUBJECT}"  || exit 1
+    openssl req -x509 -new -nodes -key ${CA_KEY} -days ${CA_EXPIRE} -out ${CA_CERT} -subj "/CN=${CA_SUBJECT}" > /dev/null  || exit 1
 fi
-
-[[ -n $DEBUG ]] && cat $CA_CERT
 
 echo "====> Generating new config file ${SSL_CONFIG}"
 cat > ${SSL_CONFIG} <<EOM
@@ -75,27 +73,32 @@ EOM
 fi
 
 echo "====> Generating new SSL KEY ${SSL_KEY}"
-openssl genrsa -out ${SSL_KEY} ${SSL_SIZE}  || exit 1
+openssl genrsa -out ${SSL_KEY} ${SSL_SIZE} > /dev/null || exit 1
 
 echo "====> Generating new SSL CSR ${SSL_CSR}"
-openssl req -new -key ${SSL_KEY} -out ${SSL_CSR} -subj "/CN=${SSL_SUBJECT}" -config ${SSL_CONFIG}  || exit 1
+openssl req -new -key ${SSL_KEY} -out ${SSL_CSR} -subj "/CN=${SSL_SUBJECT}" -config ${SSL_CONFIG} > /dev/null || exit 1
 
 echo "====> Generating new SSL CERT ${SSL_CERT}"
 openssl x509 -req -in ${SSL_CSR} -CA ${CA_CERT} -CAkey ${CA_KEY} -CAcreateserial -out ${SSL_CERT} \
-    -days ${SSL_EXPIRE} -extensions v3_req -extfile ${SSL_CONFIG}  || exit 1
+    -days ${SSL_EXPIRE} -extensions v3_req -extfile ${SSL_CONFIG} > /dev/null || exit 1
 
-echo -n
-echo -n
-echo "***** CA CERT"
-cat $CA_CERT
-echo -n
-echo -n
-echo "***** SSL_KEY"
-cat $SSL_KEY
-echo -n
-echo -n
-echo "***** SSL CERT"
-cat $SSL_CERT
-echo -n
-echo -n
-
+echo "====> Complete"
+echo "keys can be found in volume mapped to $(pwd)"
+echo
+echo "====> Output results as YAML"
+echo "---"
+echo "ca_key: |"
+cat $CA_KEY | sed 's/^/  /'
+echo
+echo "ca_cert: |"
+cat $CA_CERT | sed 's/^/  /'
+echo
+echo "ssl_key: |"
+cat $SSL_KEY | sed 's/^/  /'
+echo
+echo "ssl_csr: |"
+cat $SSL_CSR | sed 's/^/  /'
+echo
+echo "ssl_cert: |"
+cat $SSL_CERT | sed 's/^/  /'
+echo

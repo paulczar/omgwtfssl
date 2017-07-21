@@ -47,7 +47,7 @@ Advanced Usage
 Customize the certs using the following Environment Variables:
 
 * `CA_KEY` CA Key file, default `ca-key.pem` __[1]__
-* `CA_CERT` CA Certificate file, default `ca-cert.pem` __[1]__
+* `CA_CERT` CA Certificate file, default `ca.pem` __[1]__
 * `CA_SUBJECT` CA Subject, default `test-ca`
 * `CA_EXPIRE` CA Expiry, default `60` days
 * `SSL_CONFIG` SSL Config, default `openssl.cnf` __[1]__

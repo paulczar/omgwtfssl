@@ -23,6 +23,8 @@ export SSL_SUBJECT=${SSL_SUBJECT:-"example.com"}
 export SSL_DNS=${SSL_DNS}
 export SSL_IP=${SSL_IP}
 
+export OUTPUT=${OUTPUT:-"yaml"}
+
 [[ -z $SILENT ]] && echo "--> Certificate Authority"
 
 if [[ -e ./${CA_KEY} ]]; then
@@ -86,21 +88,53 @@ if [[ -z $SILENT ]]; then
 echo "====> Complete"
 echo "keys can be found in volume mapped to $(pwd)"
 echo
-echo "====> Output results as YAML"
-echo "---"
-echo "ca_key: |"
-cat $CA_KEY | sed 's/^/  /'
-echo
-echo "ca_cert: |"
-cat $CA_CERT | sed 's/^/  /'
-echo
-echo "ssl_key: |"
-cat $SSL_KEY | sed 's/^/  /'
-echo
-echo "ssl_csr: |"
-cat $SSL_CSR | sed 's/^/  /'
-echo
-echo "ssl_cert: |"
-cat $SSL_CERT | sed 's/^/  /'
-echo
+
+if [[ ${OUTPUT} == "k8s" ]]; then
+  echo "====> Output results as base64 k8s secrets"
+  echo "---"
+  cat << EOM
+apiVersion: v1
+kind: Secret
+metadata:
+  name: omgwtfssl 
+  namespace: default
+type: kubernetes.io/tls
+data:
+EOM
+
+  echo -n "  ca_key: "
+  cat $CA_KEY | base64 | tr '\n' ',' | sed 's/,//g'
+  echo 
+  echo -n "  ca_cert: "
+  cat $CA_CERT | base64 | tr '\n' ',' | sed 's/,//g'
+  echo 
+  echo -n "  ssl_key: "
+  cat $SSL_KEY | base64 | tr '\n' ',' | sed 's/,//g'
+  echo 
+  echo  -n "  ssl_csr: "
+  cat $SSL_CSR | base64 | tr '\n' ',' | sed 's/,//g'
+  echo 
+  echo -n "  ssl_cert: "
+  cat $SSL_CERT | base64 | tr '\n' ',' | sed 's/,//g'
+  echo 
+
+else
+  echo "====> Output results as YAML"
+  echo "---"
+  echo "ca_key: |"
+  cat $CA_KEY | sed 's/^/  /'
+  echo
+  echo "ca_cert: |"
+  cat $CA_CERT | sed 's/^/  /'
+  echo
+  echo "ssl_key: |"
+  cat $SSL_KEY | sed 's/^/  /'
+  echo
+  echo "ssl_csr: |"
+  cat $SSL_CSR | sed 's/^/  /'
+  echo
+  echo "ssl_cert: |"
+  cat $SSL_CERT | sed 's/^/  /'
+  echo
+fi
 fi

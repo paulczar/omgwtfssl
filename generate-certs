@@ -94,10 +94,9 @@ echo "keys can be found in volume mapped to $(pwd)"
 echo
 
 if [[ ${OUTPUT} == "k8s" ]]; then
-  mkdir /k8s
   echo "====> Output results as base64 k8s secrets"
   echo "---"
-  cat << EOM | tee /k8s/secret.yaml
+  cat << EOM | tee /certs/secret.yaml
 apiVersion: v1
 kind: Secret
 metadata:
@@ -107,19 +106,19 @@ type: kubernetes.io/tls
 data:
 EOM
 if [[ -n $K8S_SAVE_CA_KEY ]]; then
-  echo -n "  ca_key: " | tee -a /k8s/secret.yaml
-  cat $CA_KEY | base64 | tr '\n' ',' | sed 's/,//g' | tee -a /k8s/secret.yaml
-  echo | tee -a /k8s/secret.yaml
+  echo -n "  ca_key: " | tee -a /certs/secret.yaml
+  cat $CA_KEY | base64 | tr '\n' ',' | sed 's/,//g' | tee -a /certs/secret.yaml
+  echo | tee -a /certs/secret.yaml
 fi
-  echo -n "  ca_crt: " | tee -a /k8s/secret.yaml
-  cat $CA_CERT | base64 | tr '\n' ',' | sed 's/,//g' | tee -a /k8s/secret.yaml
-  echo | tee -a /k8s/secret.yaml
-  echo -n "  ssl_key: " | tee -a /k8s/secret.yaml
-  cat $SSL_KEY | base64 | tr '\n' ',' | sed 's/,//g' | tee -a /k8s/secret.yaml
-  echo | tee -a /k8s/secret.yaml
-  echo -n "  ssl_crt: " | tee -a /k8s/secret.yaml
-  cat $SSL_CERT | base64 | tr '\n' ',' | sed 's/,//g' | tee -a /k8s/secret.yaml
-  echo | tee -a /k8s/secret.yaml
+  echo -n "  ca_crt: " | tee -a /certs/secret.yaml
+  cat $CA_CERT | base64 | tr '\n' ',' | sed 's/,//g' | tee -a /certs/secret.yaml
+  echo | tee -a /certs/secret.yaml
+  echo -n "  ssl_key: " | tee -a /certs/secret.yaml
+  cat $SSL_KEY | base64 | tr '\n' ',' | sed 's/,//g' | tee -a /certs/secret.yaml
+  echo | tee -a /certs/secret.yaml
+  echo -n "  ssl_crt: " | tee -a /certs/secret.yaml
+  cat $SSL_CERT | base64 | tr '\n' ',' | sed 's/,//g' | tee -a /certs/secret.yaml
+  echo | tee -a /certs/secret.yaml
 
 else
   echo "====> Output results as YAML"

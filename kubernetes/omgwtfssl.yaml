@@ -1,13 +1,31 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: pi
+  name: omgwtfssl
 spec:
   template:
     spec:
-      containers:
-      - name: pi
-        image: perl
-        command: ["perl",  "-Mbignum=bpi", "-wle", "print bpi(2000)"]
       restartPolicy: Never
-  backoffLimit: 4
+      containers:
+      - name: omgwtfssl
+        image: paulczar/omgwtfssl
+        env:
+        - name: SSL_SUBJECT
+          value: "*.192.168.99.100.xip.io"
+        - name: SSL_IP
+          value: "192.168.99.100"
+        - name: SSL_EXPIRE
+          value: "3600"
+        - name: OUTPUT
+          value: "k8s"
+        volumeMounts:
+        - name: secret-path
+          mountPath: /k8s
+      - name: kubectl
+        image: lachlanevenson/k8s-kubectl:v.1.9.3
+        volumeMounts:
+        - name: secret-path
+          mountPath: /k8s
+      volumes:
+      - name: secret-path
+        emptyDir: {}

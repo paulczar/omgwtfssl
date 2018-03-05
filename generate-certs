@@ -23,6 +23,10 @@ export SSL_SUBJECT=${SSL_SUBJECT:-"example.com"}
 export SSL_DNS=${SSL_DNS}
 export SSL_IP=${SSL_IP}
 
+export K8S_NAME=${K8S_NAME:-"omgwtfssl"}
+export K8S_NAMESPACE=${K8S_NAMESPACE:-"default"}
+export K8S_SAVE_CA_KEY=${K8S_SAVE_CA_KEY}
+
 export OUTPUT=${OUTPUT:-"yaml"}
 
 [[ -z $SILENT ]] && echo "--> Certificate Authority"
@@ -90,33 +94,32 @@ echo "keys can be found in volume mapped to $(pwd)"
 echo
 
 if [[ ${OUTPUT} == "k8s" ]]; then
+  mkdir /k8s
   echo "====> Output results as base64 k8s secrets"
   echo "---"
-  cat << EOM
+  cat << EOM | tee /k8s/secret.yaml
 apiVersion: v1
 kind: Secret
 metadata:
-  name: omgwtfssl 
-  namespace: default
+  name: ${K8S_NAME}
+  namespace: ${K8S_NAMESPACE}
 type: kubernetes.io/tls
 data:
 EOM
-
-  echo -n "  ca_key: "
-  cat $CA_KEY | base64 | tr '\n' ',' | sed 's/,//g'
-  echo 
-  echo -n "  ca_cert: "
-  cat $CA_CERT | base64 | tr '\n' ',' | sed 's/,//g'
-  echo 
-  echo -n "  ssl_key: "
-  cat $SSL_KEY | base64 | tr '\n' ',' | sed 's/,//g'
-  echo 
-  echo  -n "  ssl_csr: "
-  cat $SSL_CSR | base64 | tr '\n' ',' | sed 's/,//g'
-  echo 
-  echo -n "  ssl_cert: "
-  cat $SSL_CERT | base64 | tr '\n' ',' | sed 's/,//g'
-  echo 
+if [[ -n $K8S_SAVE_CA_KEY ]]; then
+  echo -n "  ca_key: " | tee -a /k8s/secret.yaml
+  cat $CA_KEY | base64 | tr '\n' ',' | sed 's/,//g' | tee -a /k8s/secret.yaml
+  echo | tee -a /k8s/secret.yaml
+fi
+  echo -n "  ca_crt: " | tee -a /k8s/secret.yaml
+  cat $CA_CERT | base64 | tr '\n' ',' | sed 's/,//g' | tee -a /k8s/secret.yaml
+  echo | tee -a /k8s/secret.yaml
+  echo -n "  ssl_key: " | tee -a /k8s/secret.yaml
+  cat $SSL_KEY | base64 | tr '\n' ',' | sed 's/,//g' | tee -a /k8s/secret.yaml
+  echo | tee -a /k8s/secret.yaml
+  echo -n "  ssl_crt: " | tee -a /k8s/secret.yaml
+  cat $SSL_CERT | base64 | tr '\n' ',' | sed 's/,//g' | tee -a /k8s/secret.yaml
+  echo | tee -a /k8s/secret.yaml
 
 else
   echo "====> Output results as YAML"
@@ -124,7 +127,7 @@ else
   echo "ca_key: |"
   cat $CA_KEY | sed 's/^/  /'
   echo
-  echo "ca_cert: |"
+  echo "ca_crt: |"
   cat $CA_CERT | sed 's/^/  /'
   echo
   echo "ssl_key: |"
@@ -133,7 +136,7 @@ else
   echo "ssl_csr: |"
   cat $SSL_CSR | sed 's/^/  /'
   echo
-  echo "ssl_cert: |"
+  echo "ssl_crt: |"
   cat $SSL_CERT | sed 's/^/  /'
   echo
 fi

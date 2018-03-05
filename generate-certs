@@ -26,6 +26,8 @@ export SSL_IP=${SSL_IP}
 export K8S_NAME=${K8S_NAME:-"omgwtfssl"}
 export K8S_NAMESPACE=${K8S_NAMESPACE:-"default"}
 export K8S_SAVE_CA_KEY=${K8S_SAVE_CA_KEY}
+export K8S_SAVE_CA_CRT=${K8S_SAVE_CA_CRT}
+export K8S_SHOW_SECRET=${K8S_SHOW_SECRET}
 
 export OUTPUT=${OUTPUT:-"yaml"}
 
@@ -88,15 +90,8 @@ openssl req -new -key ${SSL_KEY} -out ${SSL_CSR} -subj "/CN=${SSL_SUBJECT}" -con
 openssl x509 -req -in ${SSL_CSR} -CA ${CA_CERT} -CAkey ${CA_KEY} -CAcreateserial -out ${SSL_CERT} \
     -days ${SSL_EXPIRE} -extensions v3_req -extfile ${SSL_CONFIG} > /dev/null || exit 1
 
-if [[ -z $SILENT ]]; then
-echo "====> Complete"
-echo "keys can be found in volume mapped to $(pwd)"
-echo
-
-if [[ ${OUTPUT} == "k8s" ]]; then
-  echo "====> Output results as base64 k8s secrets"
-  echo "---"
-  cat << EOM | tee /certs/secret.yaml
+# create k8s secret file
+cat << EOM > /certs/secret.yaml
 apiVersion: v1
 kind: Secret
 metadata:
@@ -106,19 +101,31 @@ type: kubernetes.io/tls
 data:
 EOM
 if [[ -n $K8S_SAVE_CA_KEY ]]; then
-  echo -n "  ca_key: " | tee -a /certs/secret.yaml
-  cat $CA_KEY | base64 | tr '\n' ',' | sed 's/,//g' | tee -a /certs/secret.yaml
-  echo | tee -a /certs/secret.yaml
+    echo -n "  ca.key: " >> /certs/secret.yaml
+    cat $CA_KEY | base64 | tr '\n' ',' | sed 's/,//g' >> /certs/secret.yaml
+    echo >> /certs/secret.yaml
 fi
-  echo -n "  ca_crt: " | tee -a /certs/secret.yaml
-  cat $CA_CERT | base64 | tr '\n' ',' | sed 's/,//g' | tee -a /certs/secret.yaml
-  echo | tee -a /certs/secret.yaml
-  echo -n "  ssl_key: " | tee -a /certs/secret.yaml
-  cat $SSL_KEY | base64 | tr '\n' ',' | sed 's/,//g' | tee -a /certs/secret.yaml
-  echo | tee -a /certs/secret.yaml
-  echo -n "  ssl_crt: " | tee -a /certs/secret.yaml
-  cat $SSL_CERT | base64 | tr '\n' ',' | sed 's/,//g' | tee -a /certs/secret.yaml
-  echo | tee -a /certs/secret.yaml
+if [[ -n $K8S_SAVE_CA_CRT ]]; then
+    echo -n "  ca.crt: " >> /certs/secret.yaml
+    cat $CA_CERT | base64 | tr '\n' ',' | sed 's/,//g' >> /certs/secret.yaml
+    echo >> /certs/secret.yaml
+fi
+echo -n "  tls.key: " >> /certs/secret.yaml
+cat $SSL_KEY | base64 | tr '\n' ',' | sed 's/,//g' >> /certs/secret.yaml
+echo >> /certs/secret.yaml
+echo -n "  tls.crt: " >> /certs/secret.yaml
+cat $SSL_CERT | base64 | tr '\n' ',' | sed 's/,//g' >> /certs/secret.yaml
+echo >> /certs/secret.yaml
+
+if [[ -z $SILENT ]]; then
+echo "====> Complete"
+echo "keys can be found in volume mapped to $(pwd)"
+echo
+
+if [[ ${OUTPUT} == "k8s" ]]; then
+  echo "====> Output results as base64 k8s secrets"
+  echo "---"
+  cat /certs/secret.yaml
 
 else
   echo "====> Output results as YAML"

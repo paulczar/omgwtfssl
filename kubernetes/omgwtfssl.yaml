@@ -1,3 +1,13 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: omgwtfssl
+data:
+  SSL_SUBJECT: "*.192.168.99.100.xip.io"
+  SSL_IP: "192.168.99.100"
+  SSL_EXPIRE: "3600"
+  SILENT: "true"
+---
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -6,26 +16,22 @@ spec:
   template:
     spec:
       restartPolicy: Never
-      containers:
+      initContainers:
       - name: omgwtfssl
-        image: paulczar/omgwtfssl
-        env:
-        - name: SSL_SUBJECT
-          value: "*.192.168.99.100.xip.io"
-        - name: SSL_IP
-          value: "192.168.99.100"
-        - name: SSL_EXPIRE
-          value: "3600"
-        - name: OUTPUT
-          value: "k8s"
+        image: paulczar/omgwtfssl:latest
+        envFrom:
+        - configMapRef:
+            name: omgwtfssl
         volumeMounts:
-        - name: secret-path
-          mountPath: /k8s
+        - name: certs-path
+          mountPath: /certs
+      containers:
       - name: kubectl
-        image: lachlanevenson/k8s-kubectl:v.1.9.3
+        image: lachlanevenson/k8s-kubectl:v1.9.3
+        command: ["kubectl", "apply", "-f", "/certs/secret.yaml"]
         volumeMounts:
-        - name: secret-path
-          mountPath: /k8s
+        - name: certs-path
+          mountPath: /certs
       volumes:
-      - name: secret-path
+      - name: certs-path
         emptyDir: {}

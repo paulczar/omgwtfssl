@@ -31,6 +31,14 @@ export K8S_SHOW_SECRET=${K8S_SHOW_SECRET}
 
 export OUTPUT=${OUTPUT:-"yaml"}
 
+# needed for k8s cert-manager compatibility
+echo "
+[ v3_ca ]
+basicConstraints = critical,CA:TRUE
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always,issuer:always
+" >> /etc/ssl/openssl.cnf
+
 [[ -z $SILENT ]] && echo "--> Certificate Authority"
 
 if [[ -e ./${CA_KEY} ]]; then
@@ -44,7 +52,7 @@ if [[ -e ./${CA_CERT} ]]; then
     [[ -z $SILENT ]] && echo "====> Using existing CA Certificate ${CA_CERT}"
 else
     [[ -z $SILENT ]] && echo "====> Generating new CA Certificate ${CA_CERT}"
-    openssl req -x509 -new -nodes -key ${CA_KEY} -days ${CA_EXPIRE} -out ${CA_CERT} -subj "/CN=${CA_SUBJECT}" > /dev/null  || exit 1
+    openssl req -x509 -new -nodes -key ${CA_KEY} -days ${CA_EXPIRE} -out ${CA_CERT} -extensions v3_ca -subj "/CN=${CA_SUBJECT}" > /dev/null  || exit 1
 fi
 
 echo "====> Generating new config file ${SSL_CONFIG}"
@@ -57,6 +65,10 @@ distinguished_name = req_distinguished_name
 basicConstraints = CA:FALSE
 keyUsage = nonRepudiation, digitalSignature, keyEncipherment
 extendedKeyUsage = clientAuth, serverAuth
+[ v3_ca ]
+basicConstraints = critical,CA:TRUE
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always,issuer:always
 EOM
 
 if [[ -n ${SSL_DNS} || -n ${SSL_IP} ]]; then

@@ -61,14 +61,14 @@ cat > ${SSL_CONFIG} <<EOM
 req_extensions = v3_req
 distinguished_name = req_distinguished_name
 [req_distinguished_name]
-[ v3_req ]
-basicConstraints = CA:FALSE
-keyUsage = nonRepudiation, digitalSignature, keyEncipherment
-extendedKeyUsage = clientAuth, serverAuth
 [ v3_ca ]
 basicConstraints = critical,CA:TRUE
 subjectKeyIdentifier = hash
 authorityKeyIdentifier = keyid:always,issuer:always
+[ v3_req ]
+basicConstraints = CA:FALSE
+keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+extendedKeyUsage = clientAuth, serverAuth
 EOM
 
 if [[ -n ${SSL_DNS} || -n ${SSL_IP} ]]; then

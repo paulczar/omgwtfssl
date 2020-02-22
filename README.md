@@ -1,6 +1,8 @@
 OMGWTFSSL - Self Signed SSL Certificate Generator
 =================================================
 
+> "We should try to find a replacement for omgwtfssl, which is currently used to generate self-signed certificates. The name is inappropriate and unprofessional."  - [gitlab](https://gitlab.com/gitlab-org/charts/gitlab/issues/584)
+
 About
 -----
 

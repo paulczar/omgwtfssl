@@ -201,11 +201,11 @@ Enable SSL in `/etc/nginx/sites-enabled/default`:
 
 ```
 server {
-        listen 443;
+        listen 443 ssl;
         server_name test.example.com;
         root html;
         index index.html index.htm;
-        ssl on;
+
         ssl_certificate /tmp/certs/cert.pem;
         ssl_certificate_key /tmp/certs/key.pem;
         ssl_session_timeout 5m;

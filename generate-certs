@@ -1,184 +1,422 @@
 #!/usr/bin/env bash
 
-if [[ -z $SILENT ]]; then
-echo "----------------------------"
-echo "| OMGWTFSSL Cert Generator |"
-echo "----------------------------"
-echo
-fi
+# exit when any command fails
+set -e
 
-export CA_KEY=${CA_KEY-"ca-key.pem"}
-export CA_CERT=${CA_CERT-"ca.pem"}
-export CA_SUBJECT=${CA_SUBJECT:-"test-ca"}
-export CA_EXPIRE=${CA_EXPIRE:-"60"}
+COMMAND_OUTPUT=/tmp/stdout-and-stderr
 
-export SSL_CONFIG=${SSL_CONFIG:-"openssl.cnf"}
-export SSL_KEY=${SSL_KEY:-"key.pem"}
-export SSL_CSR=${SSL_CSR:-"key.csr"}
-export SSL_CERT=${SSL_CERT:-"cert.pem"}
-export SSL_SIZE=${SSL_SIZE:-"2048"}
-export SSL_EXPIRE=${SSL_EXPIRE:-"60"}
+# keep track of the last executed command
+trap 'last_command=$current_command; current_command=$BASH_COMMAND' DEBUG
+# run function on exit
+trap 'catch $?' EXIT
 
-export SSL_SUBJECT=${SSL_SUBJECT:-"example.com"}
-export SSL_DNS=${SSL_DNS}
-export SSL_IP=${SSL_IP}
-
-export K8S_NAME=${K8S_NAME:-"omgwtfssl"}
-export K8S_NAMESPACE=${K8S_NAMESPACE:-"default"}
-export K8S_SAVE_CA_KEY=${K8S_SAVE_CA_KEY}
-export K8S_SAVE_CA_CRT=${K8S_SAVE_CA_CRT}
-export K8S_SHOW_SECRET=${K8S_SHOW_SECRET}
-
-export OUTPUT=${OUTPUT:-"yaml"}
-
-echo "Generating new config file ${SSL_CONFIG}"
-
-# needed for k8s cert-manager compatibility
-echo "
-[ v3_ca ]
-basicConstraints = critical,CA:TRUE
-subjectKeyIdentifier = hash
-authorityKeyIdentifier = keyid:always,issuer:always
-" >> /etc/ssl/openssl.cnf
-
-[[ -z $SILENT ]] && echo "--> Certificate Authority"
-
-if [[ -e ./${CA_KEY} ]]; then
-    [[ -z $SILENT ]] && echo "====> Using existing CA Key ${CA_KEY}"
-else
-    [[ -z $SILENT ]] && echo "====> Generating new CA key ${CA_KEY}"
-    openssl genrsa -out ${CA_KEY} ${SSL_SIZE} > /dev/null
-fi
-
-if [[ -e ./${CA_CERT} ]]; then
-    [[ -z $SILENT ]] && echo "====> Using existing CA Certificate ${CA_CERT}"
-else
-    [[ -z $SILENT ]] && echo "====> Generating new CA Certificate ${CA_CERT}"
-    openssl req -x509 -new -nodes -key ${CA_KEY} -days ${CA_EXPIRE} -out ${CA_CERT} -extensions v3_ca -subj "/CN=${CA_SUBJECT}" > /dev/null  || exit 1
-fi
-
-cat > ${SSL_CONFIG} <<EOM
-[ v3_ca ]
-subjectKeyIdentifier = hash
-authorityKeyIdentifier = keyid:always,issuer:always
-basicConstraints = CA:true
-[req]
-x509_extensions = v3_ca
-req_extensions = v3_req
-distinguished_name = req_distinguished_name
-[req_distinguished_name]
-[ v3_ca ]
-basicConstraints = critical,CA:TRUE
-subjectKeyIdentifier = hash
-authorityKeyIdentifier = keyid:always,issuer:always
-[ v3_req ]
-basicConstraints = CA:FALSE
-keyUsage = nonRepudiation, digitalSignature, keyEncipherment
-extendedKeyUsage = clientAuth, serverAuth
-EOM
-
-if [[ -n ${SSL_DNS} || -n ${SSL_IP} ]]; then
-    cat >> ${SSL_CONFIG} <<EOM
-subjectAltName = @alt_names
-[alt_names]
-EOM
-
-    IFS=","
-    dns=(${SSL_DNS})
-    dns+=(${SSL_SUBJECT})
-    for i in "${!dns[@]}"; do
-      echo DNS.$((i+1)) = ${dns[$i]} >> ${SSL_CONFIG}
-    done
-
-    if [[ -n ${SSL_IP} ]]; then
-        ip=(${SSL_IP})
-        for i in "${!ip[@]}"; do
-          echo IP.$((i+1)) = ${ip[$i]} >> ${SSL_CONFIG}
-        done
+catch() {
+    # This is called by the trap for every EXIT, with the exit code
+    if [ "$1" != "0" ]; then
+        # error handling goes here
+        echo -e "\nError with exit code $1 occurred when executing:\n\n$last_command"
+        if [[ -e ${COMMAND_OUTPUT} ]]; then
+            echo -e "\nError output:\n"
+            cat ${COMMAND_OUTPUT}
+        fi
     fi
+}
+
+if [[ -z $SILENT ]]; then
+echo "----------------------------"
+echo "| Docker CA Cert Generator |"
+echo "----------------------------"
+echo
 fi
 
+export SSL_SIZE=${SSL_SIZE:-"4096"}
+
+export CA_CERT=certs/${CA_CERT-"ca.crt"}
+# derive default CA "basename" from filename without path and extension(s)
+CA=${CA_CERT##*/}
+CA=${CA%%.*}
+export CA_KEY=private/${CA}.key
+export CA_CN=${CA_CN:-"test-ca"}
+export CA_C=${CA_C:-"GB"}
+export CA_ST=${CA_ST:-"Fake State"}
+export CA_L=${CA_L:-"Fake Town"}
+export CA_O=${CA_O:-"Organisation"}
+export CA_OU=${CA_OU:-"Org Unit"}
+export CA_EMAIL=${CA_EMAIL}
+export CA_EXPIRE=${CA_EXPIRE:-"60"}
+export CA_SSL_CONFIG=${CA_SSL_CONFIG:-"openssl.cnf"}
+
+export INTERMEDIATE_CA_CERT=intermediate/certs/${INTERMEDIATE_CA_CERT-"intermediate.cacert.pem"}
+# derive default Intermediate CA "basename" from filename without path and extension(s)
+INTERMEDIATE_CA=${INTERMEDIATE_CA_CERT##*/}
+INTERMEDIATE_CA=${INTERMEDIATE_CA%%.*}
+export INTERMEDIATE_CA_KEY=intermediate/private/${INTERMEDIATE_CA}.key
+export INTERMEDIATE_CA_CSR=intermediate/csr/${INTERMEDIATE_CA}.csr
+export INTERMEDIATE_CA_CHAIN_BUNDLE=intermediate/certs/${INTERMEDIATE_CA_CHAIN_BUNDLE-"ca-chain-bundle.cert.pem"}
+export INTERMEDIATE_CA_EXPIRE=${INTERMEDIATE_CA_EXPIRE:-"60"}
+export INTERMEDIATE_CA_CN=${INTERMEDIATE_CA_CN:-"test-intermediate-ca"}
+export INTERMEDIATE_CA_EMAIL=${INTERMEDIATE_CA_EMAIL}
+export INTERMEDIATE_SSL_CONFIG=intermediate/${INTERMEDIATE_SSL_CONFIG:-"openssl.cnf"}
+
+export CLIENT_CERT=certs/${CLIENT_CERT:-"client.crt"}
+# derive default client "basename" from filename without path and extension(s)
+CLIENT=${CLIENT_CERT##*/}
+CLIENT=${CLIENT%%.*}
+export CLIENT_PASSWORD=${CLIENT_PASSWORD:-$CLIENT}
+export CLIENT_P12_CERT=private/${CLIENT}.p12
+export CLIENT_KEY=private/${CLIENT}.key
+export CLIENT_CSR=${CLIENT}.csr
+export CLIENT_EXPIRE=${CLIENT_EXPIRE:-"60"}
+export CLIENT_CERT_EXT_CONFIG=${CLIENT_CERT_EXT_CONFIG:-"client_cert_ext.cnf"}
+
+export CLIENT_CN=${CLIENT_CN:-"Test Client"}
+export CLIENT_C=${CLIENT_C:-"GB"}
+export CLIENT_L=${CLIENT_L:-"Fake Town"}
+export CLIENT_O=${CLIENT_SUBJECT_DN_O:-"Organisation"}
+export CLIENT_OU=${CLIENT_OU:-"Org Unit"}
+export CLIENT_EMAIL=${CLIENT_EMAIL:-"${CLIENT}@example.com"}
+
+export SERVER_CERT=certs/${SERVER_CERT:-"service.crt"}
+# derive default server "basename" from filename without path and extension(s)
+SERVER=${SERVER_CERT##*/}
+SERVER=${SERVER%%.*}
+export SERVER_PASSWORD=${SERVER_PASSWORD:-$SERVER}
+export SERVER_P12_CERT=private/${SERVER}.p12
+export SERVER_KEY=private/${SERVER}.key
+export SERVER_CSR=${SERVER}.csr
+export SERVER_EXPIRE=${SERVER_EXPIRE:-"60"}
+export SERVER_CERT_EXT_CONFIG=${SERVER_CERT_EXT_CONFIG:-"server_cert_ext.cnf"}
+
+export SERVER_CN=${SERVER_CN:-"${SERVER}.example.com"}
+export SERVER_C=${SERVER_C:-"GB"}
+export SERVER_L=${SERVER_L:-"Fake Town"}
+export SERVER_O=${SERVER_O:-"Organisation"}
+export SERVER_OU=${SERVER_OU:-"Org Unit"}
+export SERVER_EMAIL=${SERVER_EMAIL}
+export SERVER_DNS=${SERVER_DNS}
+export SERVER_IP=${SERVER_IP}
+
+export TRUST_STORE=certs/${TRUST_STORE:-"truststore"}
+export TRUST_STORE_PASSWORD=${TRUST_STORE_PASSWORD:-"changeit"}
 
 [[ -z $SILENT ]] && echo "--> Certificate Authority"
 
+# create folders
+mkdir -p /tls/certs /tls/private /tls/intermediate/certs /tls/intermediate/csr /tls/intermediate/private
+
+# copy files
+if [[ -e ${CA_SSL_CONFIG} ]]; then
+    [[ -z $SILENT ]] && echo "====> Using existing ${CA_SSL_CONFIG}"
+else
+    [[ -z $SILENT ]] && echo "====> Copying ${CA_SSL_CONFIG}"
+    cp /tls-conf/openssl.cnf ${CA_SSL_CONFIG}
+fi
+if [[ -e ${INTERMEDIATE_SSL_CONFIG} ]]; then
+    [[ -z $SILENT ]] && echo "====> Using existing ${INTERMEDIATE_SSL_CONFIG}"
+else
+    [[ -z $SILENT ]] && echo "====> Copying ${INTERMEDIATE_SSL_CONFIG}"
+    cp /tls-conf/openssl.intermediate.cnf ${INTERMEDIATE_SSL_CONFIG}
+fi
+if [[ -e ${CLIENT_CERT_EXT_CONFIG} ]]; then
+    [[ -z $SILENT ]] && echo "====> Using existing ${CLIENT_CERT_EXT_CONFIG}"
+else
+    [[ -z $SILENT ]] && echo "====> Copying ${CLIENT_CERT_EXT_CONFIG}"
+    cp /tls-conf/client_cert_ext.cnf ${CLIENT_CERT_EXT_CONFIG}
+fi
+if [[ -e ${SERVER_CERT_EXT_CONFIG} ]]; then
+    [[ -z $SILENT ]] && echo "====> Using existing ${SERVER_CERT_EXT_CONFIG}"
+else
+    [[ -z $SILENT ]] && echo "====> Copying ${SERVER_CERT_EXT_CONFIG}"
+    cp /tls-conf/server_cert_ext.cnf ${SERVER_CERT_EXT_CONFIG}
+fi
+
+# create files
+index_files=(/tls/index.txt /tls/intermediate/index.txt)
+for f in "${index_files[@]}"; do
+    if [[ -e $f ]]; then
+        [[ -z $SILENT ]] && echo "====> Using existing ${f}"
+    else
+        [[ -z $SILENT ]] && echo "====> Creating ${f}"
+        touch $f
+    fi
+done
+number_files=(/tls/serial /tls/intermediate/serial /tls/intermediate/crlnumber)
+for f in "${number_files[@]}"; do
+    if [[ -e $f ]]; then
+        [[ -z $SILENT ]] && echo "====> Using existing ${f}"
+    else
+        [[ -z $SILENT ]] && echo "====> Creating ${f}"
+        echo 01 > $f
+    fi
+done
+
+# use/generate Root CA Key
 if [[ -e ./${CA_KEY} ]]; then
     [[ -z $SILENT ]] && echo "====> Using existing CA Key ${CA_KEY}"
 else
     [[ -z $SILENT ]] && echo "====> Generating new CA key ${CA_KEY}"
-    openssl genrsa -out ${CA_KEY} ${SSL_SIZE} > /dev/null
+    openssl genrsa -out ${CA_KEY} ${SSL_SIZE} > ${COMMAND_OUTPUT} 2>&1
 fi
 
+# generate CA Subject DN
+CA_SUBJECT=""
+CA_SUBJECT+="/C=${CA_C}"
+CA_SUBJECT+="/ST=${CA_ST}"
+CA_SUBJECT+="/L=${CA_L}"
+CA_SUBJECT+="/O=${CA_O}"
+CA_SUBJECT+="/OU=${CA_OU}"
+CA_SUBJECT+="/CN=${CA_CN}"
+[[ -n "${CA_EMAIL}" ]] && CA_SUBJECT+="/emailAddress=${CA_EMAIL}"
+
+# use/generate Root CA Cert
 if [[ -e ./${CA_CERT} ]]; then
     [[ -z $SILENT ]] && echo "====> Using existing CA Certificate ${CA_CERT}"
 else
     [[ -z $SILENT ]] && echo "====> Generating new CA Certificate ${CA_CERT}"
-    openssl req -x509 -new -nodes -key ${CA_KEY} -days ${CA_EXPIRE} -out ${CA_CERT} -subj "/CN=${CA_SUBJECT}" -config ${SSL_CONFIG} > /dev/null  || exit 1
+    openssl req \
+        -x509 \
+        -new \
+        -nodes \
+        -key ${CA_KEY} \
+        -days ${CA_EXPIRE} \
+        -out ./${CA_CERT} \
+        -extensions v3_ca \
+        -config ${CA_SSL_CONFIG} \
+        -subj "${CA_SUBJECT}" \
+        > ${COMMAND_OUTPUT} 2>&1
 fi
 
-[[ -z $SILENT ]] && echo "====> Generating new SSL KEY ${SSL_KEY}"
-openssl genrsa -out ${SSL_KEY} ${SSL_SIZE} > /dev/null || exit 1
-
-[[ -z $SILENT ]] && echo "====> Generating new SSL CSR ${SSL_CSR}"
-openssl req -new -key ${SSL_KEY} -out ${SSL_CSR} -subj "/CN=${SSL_SUBJECT}" -config ${SSL_CONFIG} > /dev/null || exit 1
-
-[[ -z $SILENT ]] && echo "====> Generating new SSL CERT ${SSL_CERT}"
-openssl x509 -req -in ${SSL_CSR} -CA ${CA_CERT} -CAkey ${CA_KEY} -CAcreateserial -out ${SSL_CERT} \
-    -days ${SSL_EXPIRE} -extensions v3_req -extfile ${SSL_CONFIG} > /dev/null || exit 1
-
-# create k8s secret file
-cat << EOM > /certs/secret.yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: ${K8S_NAME}
-  namespace: ${K8S_NAMESPACE}
-type: kubernetes.io/tls
-data:
-EOM
-if [[ -n $K8S_SAVE_CA_KEY ]]; then
-    echo -n "  ca.key: " >> /certs/secret.yaml
-    cat $CA_KEY | base64 | tr '\n' ',' | sed 's/,//g' >> /certs/secret.yaml
-    echo >> /certs/secret.yaml
-fi
-if [[ -n $K8S_SAVE_CA_CRT ]]; then
-    echo -n "  ca.crt: " >> /certs/secret.yaml
-    cat $CA_CERT | base64 | tr '\n' ',' | sed 's/,//g' >> /certs/secret.yaml
-    echo >> /certs/secret.yaml
-fi
-echo -n "  tls.key: " >> /certs/secret.yaml
-cat $SSL_KEY | base64 | tr '\n' ',' | sed 's/,//g' >> /certs/secret.yaml
-echo >> /certs/secret.yaml
-echo -n "  tls.crt: " >> /certs/secret.yaml
-cat $SSL_CERT | base64 | tr '\n' ',' | sed 's/,//g' >> /certs/secret.yaml
-echo >> /certs/secret.yaml
-
-if [[ -z $SILENT ]]; then
-echo "====> Complete"
-echo "keys can be found in volume mapped to $(pwd)"
-echo
-
-if [[ ${OUTPUT} == "k8s" ]]; then
-  echo "====> Output results as base64 k8s secrets"
-  echo "---"
-  cat /certs/secret.yaml
-
+# use/generate Intermediate CA Key
+if [[ -e ./${INTERMEDIATE_CA_KEY} ]]; then
+    [[ -z $SILENT ]] && echo "====> Using existing Intermediate CA Key ${INTERMEDIATE_CA_KEY}"
 else
-  echo "====> Output results as YAML"
-  echo "---"
-  echo "ca_key: |"
-  cat $CA_KEY | sed 's/^/  /'
-  echo
-  echo "ca_crt: |"
-  cat $CA_CERT | sed 's/^/  /'
-  echo
-  echo "ssl_key: |"
-  cat $SSL_KEY | sed 's/^/  /'
-  echo
-  echo "ssl_csr: |"
-  cat $SSL_CSR | sed 's/^/  /'
-  echo
-  echo "ssl_crt: |"
-  cat $SSL_CERT | sed 's/^/  /'
-  echo
+    [[ -z $SILENT ]] && echo "====> Generating new Intermediate CA Key ${INTERMEDIATE_CA_KEY}"
+    openssl genrsa -out ./${INTERMEDIATE_CA_KEY} ${SSL_SIZE} > ${COMMAND_OUTPUT} 2>&1
 fi
+
+# generate Intermediate CA Subject DN
+INTERMEDIATE_CA_SUBJECT=""
+INTERMEDIATE_CA_SUBJECT+="/C=${CA_C}"
+INTERMEDIATE_CA_SUBJECT+="/O=${CA_O}"
+INTERMEDIATE_CA_SUBJECT+="/CN=${INTERMEDIATE_CA_CN}"
+[[ -n "${CA_EMAIL}" ]] && INTERMEDIATE_CA_SUBJECT+="/emailAddress=${CA_EMAIL}"
+INTERMEDIATE_CA_SUBJECT+="/L=${CA_L}"
+
+# use/generate Intermediate CA CSR
+if [[ -e ./${INTERMEDIATE_CA_CSR} ]]; then
+    [[ -z $SILENT ]] && echo "====> Using existing Intermediate CA CSR ${INTERMEDIATE_CA_CSR}"
+else
+    [[ -z $SILENT ]] && echo "====> Generating new Intermediate CA CSR ${INTERMEDIATE_CA_CSR}"
+    openssl req \
+        -new \
+        -sha256 \
+        -config intermediate/openssl.cnf \
+        -key ${INTERMEDIATE_CA_KEY} \
+        -subj "${INTERMEDIATE_CA_SUBJECT}" \
+        -out ${INTERMEDIATE_CA_CSR} \
+        > ${COMMAND_OUTPUT} 2>&1
 fi
+
+# use/generate Intermediate CA Cert
+if [[ -e ./${INTERMEDIATE_CA_CERT} ]]; then
+    [[ -z $SILENT ]] && echo "====> Using existing Intermediate CA Cert ${INTERMEDIATE_CA_CERT}"
+else
+    [[ -z $SILENT ]] && echo "====> Generating new Intermediate CA Cert ${INTERMEDIATE_CA_CERT}"
+    openssl ca \
+        -config ${CA_SSL_CONFIG} \
+        -extensions v3_intermediate_ca \
+        -days ${INTERMEDIATE_CA_EXPIRE} \
+        -notext \
+        -batch \
+        -cert ${CA_CERT} \
+        -keyfile ${CA_KEY} \
+        -in ${INTERMEDIATE_CA_CSR} \
+        -out ${INTERMEDIATE_CA_CERT} \
+        > ${COMMAND_OUTPUT} 2>&1
+fi
+
+# verify Intermediate CA Cert against Root CA Cert
+[[ -z $SILENT ]] && echo "====> Verifying Intermediate CA Cert ${INTERMEDIATE_CA_CERT}"
+openssl verify \
+    -CAfile ${CA_CERT} \
+    ${INTERMEDIATE_CA_CERT} \
+    > ${COMMAND_OUTPUT} 2>&1
+
+# use/generate Certificate Chain (Certificate Bundle)
+if [[ -e ./${INTERMEDIATE_CA_CHAIN_BUNDLE} ]]; then
+    [[ -z $SILENT ]] && echo "====> Using existing Intermediate CA Chain Bundle ${INTERMEDIATE_CA_CHAIN_BUNDLE}"
+else
+    [[ -z $SILENT ]] && echo "====> Generating new Intermediate CA Chain Bundle ${INTERMEDIATE_CA_CHAIN_BUNDLE}"
+    cat ${INTERMEDIATE_CA_CERT} ${CA_CERT} > ${INTERMEDIATE_CA_CHAIN_BUNDLE}
+fi
+
+# verify Certificate Chain (Certificate Bundle)
+[[ -z $SILENT ]] && echo "====> Verifying Intermediate CA Chain Bundle ${INTERMEDIATE_CA_CHAIN_BUNDLE}"
+openssl verify \
+    -CAfile ${CA_CERT} \
+    ${INTERMEDIATE_CA_CHAIN_BUNDLE} \
+    > ${COMMAND_OUTPUT} 2>&1
+
+# use/generate Client Key
+if [[ -e ./${CLIENT_KEY} ]]; then
+    [[ -z $SILENT ]] && echo "====> Using existing Client Key ${CLIENT_KEY}"
+else
+    [[ -z $SILENT ]] && echo "====> Generating new Client Key ${CLIENT_KEY}"
+    openssl genrsa -out ./${CLIENT_KEY} ${SSL_SIZE} > ${COMMAND_OUTPUT} 2>&1
+fi
+
+# generate Client Subject DN
+CLIENT_SUBJECT=""
+CLIENT_SUBJECT+="/C=${CLIENT_C}"
+CLIENT_SUBJECT+="/L=${CLIENT_L}"
+CLIENT_SUBJECT+="/O=${CLIENT_SUBJECT_DN_O}"
+CLIENT_SUBJECT+="/OU=${CLIENT_OU}"
+CLIENT_SUBJECT+="/CN=${CLIENT_CN}"
+[[ -n "${CLIENT_EMAIL}" ]] && \
+    CLIENT_SUBJECT+="/emailAddress=${CLIENT_EMAIL}"
+
+# use/generate Client CSR
+if [[ -e ./${CLIENT_CSR} ]]; then
+    [[ -z $SILENT ]] && echo "====> Using existing Client CSR ${CLIENT_CSR}"
+else
+    [[ -z $SILENT ]] && echo "====> Generating new Client CSR ${CLIENT_CSR}"
+    openssl req \
+        -new \
+        -sha256 \
+        -config intermediate/openssl.cnf \
+        -key ${CLIENT_KEY} \
+        -subj "${CLIENT_SUBJECT}" \
+        -out ${CLIENT_CSR} \
+        > ${COMMAND_OUTPUT} 2>&1
+fi
+
+# use/generate Client Cert
+if [[ -e ./${CLIENT_CERT} ]]; then
+    [[ -z $SILENT ]] && echo "====> Using existing Client Cert ${CLIENT_CERT}"
+else
+    [[ -z $SILENT ]] && echo "====> Generating new Client Cert ${CLIENT_CERT}"
+    openssl x509 \
+        -req \
+        -in ${CLIENT_CSR} \
+        -CA ${INTERMEDIATE_CA_CHAIN_BUNDLE} \
+        -CAkey ${INTERMEDIATE_CA_KEY} \
+        -out ${CLIENT_CERT} \
+        -CAcreateserial \
+        -days ${CLIENT_EXPIRE} \
+        -sha256 \
+        -extfile ${CLIENT_CERT_EXT_CONFIG} \
+        > ${COMMAND_OUTPUT} 2>&1
+fi
+
+# verify Client Cert against Cert Bundle
+[[ -z $SILENT ]] && echo "====> Verifying Client Cert ${CLIENT_CERT}"
+openssl verify \
+    -CAfile ${INTERMEDIATE_CA_CHAIN_BUNDLE} \
+    ${CLIENT_CERT} \
+    > ${COMMAND_OUTPUT} 2>&1
+
+# use/generate Client PKCS12 Cert
+if [[ -e ./${CLIENT_P12_CERT} ]]; then
+    [[ -z $SILENT ]] && echo "====> Using existing Client P12 Cert ${CLIENT_P12_CERT}"
+else
+    [[ -z $SILENT ]] && echo "====> Generating new Client P12 Cert ${CLIENT_P12_CERT}"
+    openssl pkcs12 \
+        -export \
+        -out ${CLIENT_P12_CERT} \
+        -inkey ${CLIENT_KEY} \
+        -certfile ${INTERMEDIATE_CA_CHAIN_BUNDLE} \
+        -in ${CLIENT_CERT} \
+        -passout pass:${CLIENT_PASSWORD} \
+        > ${COMMAND_OUTPUT} 2>&1
+fi
+
+# use/generate Server Key
+if [[ -e ./${SERVER_KEY} ]]; then
+    [[ -z $SILENT ]] && echo "====> Using existing Server Key ${SERVER_KEY}"
+else
+    [[ -z $SILENT ]] && echo "====> Generating new Server Key ${SERVER_KEY}"
+    openssl genrsa -out ./${SERVER_KEY} ${SSL_SIZE} > ${COMMAND_OUTPUT} 2>&1
+fi
+
+# generate Server Subject DN
+SERVER_SUBJECT=""
+SERVER_SUBJECT+="/C=${SERVER_C}"
+SERVER_SUBJECT+="/L=${SERVER_L}"
+SERVER_SUBJECT+="/O=${SERVER_O}"
+SERVER_SUBJECT+="/OU=${SERVER_OU}"
+SERVER_SUBJECT+="/CN=${SERVER_CN}"
+[[ -n "${SERVER_EMAIL}" ]] && \
+    SERVER_SUBJECT+="/emailAddress=${SERVER_EMAIL}"
+
+# use/generate Server CSR
+if [[ -e ./${SERVER_CSR} ]]; then
+    [[ -z $SILENT ]] && echo "====> Using existing Server CSR ${SERVER_CSR}"
+else
+    [[ -z $SILENT ]] && echo "====> Generating new Server CSR ${SERVER_CSR}"
+    openssl req \
+        -new \
+        -sha256 \
+        -config intermediate/openssl.cnf \
+        -key ${SERVER_KEY} \
+        -subj "${SERVER_SUBJECT}" \
+        -out ${SERVER_CSR} \
+        > ${COMMAND_OUTPUT} 2>&1
+fi
+
+# use/generate Server Cert
+if [[ -e ./${SERVER_CERT} ]]; then
+    [[ -z $SILENT ]] && echo "====> Using existing Server Cert ${SERVER_CERT}"
+else
+    [[ -z $SILENT ]] && echo "====> Generating new Server Cert ${SERVER_CERT}"
+    openssl x509 \
+        -req \
+        -in ${SERVER_CSR} \
+        -CA ${INTERMEDIATE_CA_CHAIN_BUNDLE} \
+        -CAkey ${INTERMEDIATE_CA_KEY} \
+        -out ${SERVER_CERT} \
+        -CAcreateserial \
+        -days ${SERVER_EXPIRE} \
+        -sha256 \
+        -extfile ${SERVER_CERT_EXT_CONFIG} \
+        > ${COMMAND_OUTPUT} 2>&1
+fi
+
+# verify Server Cert against Cert Bundle
+[[ -z $SILENT ]] && echo "====> Verifying Server Cert ${SERVER_CERT}"
+openssl verify \
+    -CAfile ${INTERMEDIATE_CA_CHAIN_BUNDLE} \
+    ${SERVER_CERT} \
+    > ${COMMAND_OUTPUT} 2>&1
+
+# use/generate Server PKCS12 Cert
+if [[ -e ./${SERVER_P12_CERT} ]]; then
+    [[ -z $SILENT ]] && echo "====> Using existing Server P12 Cert ${SERVER_P12_CERT}"
+else
+    [[ -z $SILENT ]] && echo "====> Generating new Server P12 Cert ${SERVER_P12_CERT}"
+    openssl pkcs12 \
+        -export \
+        -out ${SERVER_P12_CERT} \
+        -inkey ${SERVER_KEY} \
+        -certfile ${INTERMEDIATE_CA_CHAIN_BUNDLE} \
+        -in ${SERVER_CERT} \
+        -passout pass:${SERVER_PASSWORD} \
+        > ${COMMAND_OUTPUT} 2>&1
+fi
+
+# use/generate Java cert trust store (for Java mutual TLS)
+if [[ -e ./${TRUST_STORE} ]]; then
+    [[ -z $SILENT ]] && echo "====> Using existing Trust Store ${TRUST_STORE}"
+else
+    [[ -z $SILENT ]] && echo "====> Generating new Trust Store ${TRUST_STORE}"
+    keytool \
+        -import \
+        -file ${CA_CERT} \
+        -alias rootCA \
+        -keystore ${TRUST_STORE} \
+        -storepass ${TRUST_STORE_PASSWORD} \
+        -noprompt \
+        > ${COMMAND_OUTPUT} 2>&1
+fi
+
+# successful run without any errors
+echo -e "\nCerts successfully generated in the volume mapped to /tls"
